@@ -1,11 +1,14 @@
 import random
 import itertools
+from collections import namedtuple
 
 import gym
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from pong_env import PongEnv
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # TODO replace this class with your model
 class MyModelClass(torch.nn.Module):
@@ -26,11 +29,20 @@ class MyModelClass(torch.nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         return self.head(x.view(x.size(0), -1))
+    
+BATCH_SIZE = 128
+GAMMA = 0.999
+EPS_START = 0.9
+EPS_END = 0.05
+EPS_DECAY = 200
+TARGET_UPDATE = 10
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         
-
-
 # TODO fill out the methods of this class
 class PongPlayer(object):
+    steps_done = 0
 
     def __init__(self, save_path, load=False):
         self.build_model()
@@ -52,22 +64,24 @@ class PongPlayer(object):
         # self.optimizer = None
         self.dqn = MyModelClass()
         self.optimizer = torch.optim.RMSprop(self.dqn.parameters(), lr=0.0001)
-        
-    policy_net = MyModelClass()
     
     def get_action(self, state):
         # TODO: this method should return the output of your model
-        
-        print('hello')
-        
-        choice = np.random.choice([0, 1], p=(1, (1 - 1)))
-        
-        if choice == 0:
-            return np.random.choice(range(1))
+        self.steps_done += 1
+        choice = random.random()
+        eps_treshold = EPS_END + (EPS_START - EPS_END) * np.exp(-1.0 * self.steps_done / EPS_DECAY)
+        if choice > eps_treshold:
+            with torch.no_grad():
+                out = MyModelClass()(torch.tensor(state, dtype=torch.float32)).max(1)[1].view(1,1).numpy()[0, 0]
+                print(out)
+                return out
         else:
-            state = np.expand_dims(state, 0)
-            actions = self.predict_q_values(state)
-            return np.argmax(actions.data.cpu().numpy())
+            out =  torch.tensor([[random.randrange(2)]],device = device , dtype=torch.long).numpy()[0, 0]
+            print(out)
+            return out
+
+
+
 
     def reset(self):
         # TODO: this method will be called whenever a game finishes
