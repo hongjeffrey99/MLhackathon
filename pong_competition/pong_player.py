@@ -1,15 +1,32 @@
+import random
+import itertools
+
+import gym
+import numpy as np
 import torch
 
-from .pong_env import PongEnv
+from pong_env import PongEnv
 
 # TODO replace this class with your model
 class MyModelClass(torch.nn.Module):
     
     def __init__(self):
-        pass
+        super(MyModelClass, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=5, stride=2)
+        self.bn1 = torch.nn.BatchNorm2d(16)
+        self.conv2 = torch.nn.Conv2d(16, 32, kernel_size=5, stride=2)
+        self.bn2 = torch.nn.BatchNorm2d(32)
+        self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=5, stride=2)
+        self.bn3 = torch.nn.BatchNorm2d(32)
+        self.head = torch.nn.Linear(448, 2)
+        
     
     def forward(self, x):
-        pass
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        return self.head(x.view(x.size(0), -1))
+        
 
 
 # TODO fill out the methods of this class
@@ -32,11 +49,25 @@ class PongPlayer(object):
 
     def build_optimizer(self):
         # TODO: define your optimizer here
-        self.optimizer = None
-
+        # self.optimizer = None
+        self.dqn = MyModelClass()
+        self.optimizer = torch.optim.RMSprop(self.dqn.parameters(), lr=0.0001)
+        
+    policy_net = MyModelClass()
+    
     def get_action(self, state):
         # TODO: this method should return the output of your model
-        pass
+        
+        print('hello')
+        
+        choice = np.random.choice([0, 1], p=(1, (1 - 1)))
+        
+        if choice == 0:
+            return np.random.choice(range(1))
+        else:
+            state = np.expand_dims(state, 0)
+            actions = self.predict_q_values(state)
+            return np.argmax(actions.data.cpu().numpy())
 
     def reset(self):
         # TODO: this method will be called whenever a game finishes
@@ -73,3 +104,7 @@ def play_game(player, render=True):
         total_reward += reward
     
     env.close()
+    
+    
+p1 = PongPlayer('/Users/mtorjyan/Projects/Berkeley/Fall18/hackNew/hack/pong_competition/out.txt')
+play_game(p1)
