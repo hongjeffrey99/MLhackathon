@@ -1,52 +1,66 @@
 import random
 import itertools
-from collections import namedtuple
-
+import math
 import gym
 import numpy as np
 import torch
+from collections import namedtuple
+
 import torch.nn.functional as F
 
 from pong_env import PongEnv
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
+
+
+class ReplayMemory(object):
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        """Saves a transition."""
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
 
 # TODO replace this class with your model
 class MyModelClass(torch.nn.Module):
     
     def __init__(self):
         super(MyModelClass, self).__init__()
-        self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=5, stride=2)
-        self.bn1 = torch.nn.BatchNorm2d(16)
-        self.conv2 = torch.nn.Conv2d(16, 32, kernel_size=5, stride=2)
-        self.bn2 = torch.nn.BatchNorm2d(32)
-        self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=5, stride=2)
-        self.bn3 = torch.nn.BatchNorm2d(32)
-        self.head = torch.nn.Linear(448, 2)
+        self.linear1 = torch.nn.Linear(7, 5)
+        self.linear2 = torch.nn.Linear(5, 3 )
+        self.steps = 0
         
     
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        return self.head(x.view(x.size(0), -1))
-    
-BATCH_SIZE = 128
-GAMMA = 0.999
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 200
-TARGET_UPDATE = 10
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        return x
         
+
+
 # TODO fill out the methods of this class
 class PongPlayer(object):
-    steps_done = 0
 
     def __init__(self, save_path, load=False):
         self.build_model()
         self.build_optimizer()
+        self.steps = 0
         self.save_path = save_path
         if load:
             self.load()
@@ -64,24 +78,26 @@ class PongPlayer(object):
         # self.optimizer = None
         self.dqn = MyModelClass()
         self.optimizer = torch.optim.RMSprop(self.dqn.parameters(), lr=0.0001)
-    
+        
+    policy_net = MyModelClass()
+
     def get_action(self, state):
         # TODO: this method should return the output of your model
-        self.steps_done += 1
+        print(state)
+        self.steps += 1
         choice = random.random()
-        eps_treshold = EPS_END + (EPS_START - EPS_END) * np.exp(-1.0 * self.steps_done / EPS_DECAY)
+        eps_treshold = EPS_END + (EPS_START - EPS_END) * np.exp(-1.0 * self.steps / EPS_DECAY)
         if choice > eps_treshold:
             with torch.no_grad():
-                out = MyModelClass()(torch.tensor(state, dtype=torch.float32)).max(1)[1].view(1,1).numpy()[0, 0]
-                print(out)
+                tensor = MyModelClass().to(device)(torch.tensor(state, dtype=torch.float32))
+                print(tensor)
+                print(tensor.max(0)[1])
+                out = tensor.max(0)[1].numpy()
                 return out
         else:
             out =  torch.tensor([[random.randrange(2)]],device = device , dtype=torch.long).numpy()[0, 0]
-            print(out)
             return out
-
-
-
+        
 
     def reset(self):
         # TODO: this method will be called whenever a game finishes
@@ -118,6 +134,19 @@ def play_game(player, render=True):
         total_reward += reward
     
     env.close()
+
+BATCH_SIZE = 128
+GAMMA = 0.999
+EPS_START = 0.9
+EPS_DECAY = 200
+EPS_END = 0.05
+TARGET_UPDATE = 10
+policy_net = MyModelClass().to(device)
+target_net = MyModelClass().to(device)
+target_net.load_state_dict(policy_net.state_dict())
+target_net.eval()
+memory = ReplayMemory(10000)
+
     
     
 p1 = PongPlayer('/Users/mtorjyan/Projects/Berkeley/Fall18/hackNew/hack/pong_competition/out.txt')
